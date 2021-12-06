@@ -6,19 +6,23 @@ Code in this repository is also available in the Huggingface Transformer [repo](
 
 ## Installation
 
-Modified and tested on Python 3.9, PyTorch 1.10, and Cuda 10.2, following the latest PyTorch installation guide
+Modified and tested on Ubuntu 18.04, Python 3.9, PyTorch 1.10, and Cuda 10.2, following the latest PyTorch installation guide
 
-```
+```bash
 conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch
+# pip3 install torch torchvision torchaudio
 ```
 
 After installing the required environment, clone this repo, and install the following requirements:
 
-```
+```bash
 git clone https://github.com/sbwww/DeeBERT.git
-cd deebert
-pip install -r ./requirements.txt
-pip install -r ./examples/requirements.txt
+# git clone https://gitee.com/nj-bwshen/DeeBERT.git
+cd DeeBERT
+conda install --file ./requirements.txt
+conda install --file ./examples/requirements.txt
+# pip install -r ./requirements.txt
+# pip install -r ./examples/requirements.txt
 ```
 
 ---
@@ -52,12 +56,16 @@ There are four scripts in the `scripts` folder, which can be run from the repo r
 In each script, there are several things to modify before running:
 
 * path to the GLUE dataset. Check [this](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e) for more details.
+  use the following code to download
+  ```bash
+  python download_glue_data.py --data_dir glue_data --tasks all
+  ```
 * path for saving fine-tuned models. Default: `./saved_models`.
 * path for saving evaluation results. Default: `./plotting`. Results are printed to stdout and also saved to `npy` files in this directory to facilitate plotting figures and further analyses.
 * model_type (bert or roberta)
 * model_size (base or large)
 * dataset (SST-2, MRPC, RTE, QNLI, QQP, or MNLI)
-* `CUDA_VISIBLE_DEVICES` and `N_GPU`
+* settings related to multi-gpu training, `CUDA_VISIBLE_DEVICES` in `scripts/*.sh` and `N_GPU` in `DeeBERT.sh`.
 
 #### train.sh
 
@@ -79,7 +87,8 @@ This is for evaluating fine-tuned DeeBERT models, given a number of different ea
 
 ## Citation
 
-Please cite our paper if you find the repository useful:
+Please cite the original paper if DeeBERT is used:
+
 ```
 @inproceedings{xin-etal-2020-deebert,
     title = "{D}ee{BERT}: Dynamic Early Exiting for Accelerating {BERT} Inference",
@@ -98,3 +107,15 @@ Please cite our paper if you find the repository useful:
 }
 ```
 
+Kindly cite this repo if you find it useful:
+
+```
+@misc{Shen2021,
+  author = {Shen, Bowen},
+  title = {sbwww/DeeBERT},
+  year = {2021},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/sbwww/DeeBERT}}
+}
+```

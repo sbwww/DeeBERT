@@ -268,7 +268,7 @@ def evaluate(args, model, tokenizer, prefix="", output_layer=-1, eval_highway=Fa
         preds = None
         out_label_ids = None
         exit_layer_counter = {(i+1):0 for i in range(model.num_layers)}
-        exit_layer_counter_correct = {(i+1):0 for i in range(model.num_layers)} # FIXME: 正类数量统计
+        exit_layer_counter_correct = {(i+1):0 for i in range(model.num_layers)} # 正确结果数量统计
         st = time.time()
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             model.eval()
@@ -284,7 +284,7 @@ def evaluate(args, model, tokenizer, prefix="", output_layer=-1, eval_highway=Fa
                     inputs['output_layer'] = output_layer
                 outputs = model(**inputs)
                 if eval_highway:
-                    exit_layer_counter[outputs[-1]] += 1 # FIXME: +1 还是 +args.eval_batch_size
+                    exit_layer_counter[outputs[-1]] += 1
                 tmp_eval_loss, logits = outputs[:2]
                 eval_loss += tmp_eval_loss.mean().item()
             nb_eval_steps += 1
