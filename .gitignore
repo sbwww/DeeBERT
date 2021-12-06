@@ -142,6 +142,7 @@ debug.env
 
 # model checkpoints
 saved_models
+!plotting/saved_models
 
 .circleci/
 .coveragerc
