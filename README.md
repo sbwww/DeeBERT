@@ -6,24 +6,46 @@ Code in this repository is also available in the Huggingface Transformer [repo](
 
 ## Installation
 
-This repo is tested on Python 3.7.5, PyTorch 1.3.1, and Cuda 10.1. Using a virtulaenv or conda environemnt is recommended, for example:
+Modified and tested on Python 3.9, PyTorch 1.10, and Cuda 10.2, following the latest PyTorch installation guide
 
 ```
-conda install pytorch==1.3.1 torchvision cudatoolkit=10.1 -c pytorch
+conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch
 ```
 
 After installing the required environment, clone this repo, and install the following requirements:
 
 ```
-git clone https://github.com/castorini/deebert
+git clone https://github.com/sbwww/DeeBERT.git
 cd deebert
 pip install -r ./requirements.txt
 pip install -r ./examples/requirements.txt
 ```
 
+---
+
+~~This repo is tested on Python 3.7.5, PyTorch 1.3.1, and Cuda 10.1. Using a virtulaenv or conda environemnt is recommended, for example:~~
+
+~~conda install pytorch==1.3.1 torchvision cudatoolkit=10.1 -c pytorch~~
+
+~~After installing the required environment, clone this repo, and install the following requirements:~~
+
+~~git clone https://github.com/castorini/deebert~~
+
+~~cd deebert~~
+
+~~pip install -r ./requirements.txt~~
+
+~~pip install -r ./examples/requirements.txt~~
+
 
 
 ## Usage
+
+Added script `DeeBERT.sh` to run the entire process
+
+`DeeBERT.ipynb` is also available, but VSCode stucks when the output of tqdm is long, so the notebook is mainly use as a reference of Colab
+
+---
 
 There are four scripts in the `scripts` folder, which can be run from the repo root, e.g., `scripts/train.sh`.
 
@@ -35,6 +57,7 @@ In each script, there are several things to modify before running:
 * model_type (bert or roberta)
 * model_size (base or large)
 * dataset (SST-2, MRPC, RTE, QNLI, QQP, or MNLI)
+* `CUDA_VISIBLE_DEVICES` and `N_GPU`
 
 #### train.sh
 
@@ -44,6 +67,8 @@ This is for fine-tuning and evaluating models as in the original BERT paper.
 
 This is for fine-tuning DeeBERT models.
 
+The fine-tuning is a two-stage process.
+
 #### eval_highway.sh
 
 This is for evaluating each exit layer for fine-tuned DeeBERT models.
@@ -51,8 +76,6 @@ This is for evaluating each exit layer for fine-tuned DeeBERT models.
 #### eval_entropy.sh
 
 This is for evaluating fine-tuned DeeBERT models, given a number of different early exit entropy thresholds.
-
-
 
 ## Citation
 

@@ -22,6 +22,7 @@ import glob
 import logging
 import os
 import random
+import sys
 
 import numpy as np
 import torch
@@ -36,6 +37,8 @@ except:
 
 from tqdm import tqdm, trange
 
+# for torchrun, import transformers in a folder other than examples/
+sys.path.append('')
 from transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForSequenceClassification, BertTokenizer,
                                   RobertaConfig,

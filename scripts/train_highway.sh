@@ -1,11 +1,12 @@
 #!/bin/bash
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 PATH_TO_DATA=$1
 
 MODEL_TYPE=$2  # bert or roberta
 MODEL_SIZE=$3  # base or large
 DATASET=$4  # SST-2, MRPC, RTE, QNLI, QQP, or MNLI
+N_GPU=$5
 
 MODEL_NAME=${MODEL_TYPE}-${MODEL_SIZE}
 EPOCHS=10
@@ -16,7 +17,8 @@ then
 fi
 
 
-python -um examples.run_highway_glue \
+# python -um examples.run_highway_glue \
+python -m torch.distributed.launch --nproc_per_node=$N_GPU examples/run_highway_glue.py \
   --model_type $MODEL_TYPE \
   --model_name_or_path $MODEL_NAME \
   --task_name $DATASET \

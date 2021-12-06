@@ -23,6 +23,7 @@ import logging
 import os
 import random
 import time
+import sys
 
 import numpy as np
 import torch
@@ -37,6 +38,8 @@ except:
 
 from tqdm import tqdm, trange
 
+# for torchrun, import transformers in a folder other than examples/
+sys.path.append('')
 from transformers import (WEIGHTS_NAME, BertConfig,
                                   BertTokenizer,
                                   RobertaConfig,
@@ -265,6 +268,7 @@ def evaluate(args, model, tokenizer, prefix="", output_layer=-1, eval_highway=Fa
         preds = None
         out_label_ids = None
         exit_layer_counter = {(i+1):0 for i in range(model.num_layers)}
+        exit_layer_counter_correct = {(i+1):0 for i in range(model.num_layers)} # FIXME: 正类数量统计
         st = time.time()
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             model.eval()
@@ -280,17 +284,20 @@ def evaluate(args, model, tokenizer, prefix="", output_layer=-1, eval_highway=Fa
                     inputs['output_layer'] = output_layer
                 outputs = model(**inputs)
                 if eval_highway:
-                    exit_layer_counter[outputs[-1]] += 1
+                    exit_layer_counter[outputs[-1]] += 1 # FIXME: +1 还是 +args.eval_batch_size
                 tmp_eval_loss, logits = outputs[:2]
-
                 eval_loss += tmp_eval_loss.mean().item()
             nb_eval_steps += 1
             if preds is None:
                 preds = logits.detach().cpu().numpy()
                 out_label_ids = inputs['labels'].detach().cpu().numpy()
+                if np.argmax(preds) == out_label_ids[-1]:
+                    exit_layer_counter_correct[outputs[-1]] += 1
             else:
                 preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
                 out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
+                if np.argmax(preds[-1]) == out_label_ids[-1]:
+                    exit_layer_counter_correct[outputs[-1]] += 1
         eval_time = time.time() - st
         print("Eval time:", eval_time)
 
@@ -304,6 +311,7 @@ def evaluate(args, model, tokenizer, prefix="", output_layer=-1, eval_highway=Fa
 
         if eval_highway:
             print("Exit layer counter", exit_layer_counter)
+            print("Exit layer counter Correct", exit_layer_counter_correct) # 输出正类数量
             actual_cost = sum([l*c for l, c in exit_layer_counter.items()])
             full_cost = len(eval_dataloader) * model.num_layers
             print("Expected saving", actual_cost/full_cost)
@@ -316,6 +324,7 @@ def evaluate(args, model, tokenizer, prefix="", output_layer=-1, eval_highway=Fa
                 print_result = get_wanted_result(result)
                 np.save(save_fname,
                         np.array([exit_layer_counter,
+                                  exit_layer_counter_correct,
                                   eval_time,
                                   actual_cost/full_cost,
                                   print_result]))

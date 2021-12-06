@@ -261,7 +261,8 @@ class BertModel(BertPreTrainedModel):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=torch.float32)  # fp16 compatibility FIXME: unknown error occurs with original code
+        # extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
@@ -271,7 +272,8 @@ class BertModel(BertPreTrainedModel):
         if encoder_attention_mask.dim() == 2:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
 
-        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=torch.float32)  # fp16 compatibility FIXME: unknown error occurs with original code
+        # encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
 
         # Prepare head mask if needed
