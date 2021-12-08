@@ -17,10 +17,10 @@ N_GPU=2
 for DATASET in $DATASETS; do
   echo $DATASET
   echo "--------train--------"
-  bash scripts/train.sh ${PATH_TO_DATA} ${MODEL_TYPE} ${MODEL_SIZE} ${DATASET} ${N_GPU}
+  bash scripts/glue/train.sh ${PATH_TO_DATA} ${MODEL_TYPE} ${MODEL_SIZE} ${DATASET} ${N_GPU}
   echo "--------train_highway--------"
-  bash scripts/train_highway.sh ${PATH_TO_DATA} ${MODEL_TYPE} ${MODEL_SIZE} ${DATASET} ${N_GPU}
+  bash scripts/glue/train_highway.sh ${PATH_TO_DATA} ${MODEL_TYPE} ${MODEL_SIZE} ${DATASET} ${N_GPU}
   echo "--------eval--------"
-  bash scripts/eval_highway.sh ${PATH_TO_DATA} ${MODEL_TYPE} ${MODEL_SIZE} ${DATASET}
-  bash scripts/eval_entropy.sh ${PATH_TO_DATA} ${MODEL_TYPE} ${MODEL_SIZE} ${DATASET}
+  bash scripts/glue/eval_highway.sh ${PATH_TO_DATA} ${MODEL_TYPE} ${MODEL_SIZE} ${DATASET}
+  bash scripts/glue/eval_entropy.sh ${PATH_TO_DATA} ${MODEL_TYPE} ${MODEL_SIZE} ${DATASET}
 done

@@ -22,6 +22,7 @@ import glob
 import logging
 import os
 import random
+import sys
 
 import numpy as np
 import torch
@@ -33,6 +34,8 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
+# for torchrun, import transformers in a folder other than examples/
+sys.path.append('')
 from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, BertTokenizer
 from transformers import RobertaConfig, RobertaForTokenClassification, RobertaTokenizer
