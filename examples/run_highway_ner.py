@@ -182,8 +182,8 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id, tra
                 else:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
-                scheduler.step()  # Update learning rate schedule
                 optimizer.step()
+                scheduler.step()  # Update learning rate schedule
                 model.zero_grad()
                 global_step += 1
 
@@ -607,6 +607,7 @@ def main():
                 each_layer_results = []
                 for i in range(model.num_layers):
                     logger.info("\n")
+                    # FIXME: dim error
                     _result, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev", prefix=prefix,
                                        output_layer=i, eval_highway=args.eval_highway)
                     if i+1 < model.num_layers:
