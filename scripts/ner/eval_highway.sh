@@ -14,7 +14,7 @@ then
 fi
 
 
-python examples/run_highway_glue.py \
+python examples/run_highway_ner.py \
   --model_type $MODEL_TYPE \
   --model_name_or_path ./saved_models/${MODEL_TYPE}-${MODEL_SIZE}/$DATASET/two_stage \
   --task_name $DATASET \

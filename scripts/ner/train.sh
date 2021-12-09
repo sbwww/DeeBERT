@@ -20,6 +20,7 @@ fi
 python -m torch.distributed.launch --nproc_per_node=$N_GPU examples/run_ner.py \
   --model_type $MODEL_TYPE \
   --model_name_or_path $MODEL_NAME \
+  --task_name $DATASET \
   --do_train \
   --do_eval \
   --do_lower_case \

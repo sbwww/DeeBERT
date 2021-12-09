@@ -294,9 +294,10 @@ def evaluate(args, model, tokenizer, prefix="", output_layer=-1, eval_highway=Fa
                 if np.argmax(preds) == out_label_ids[-1]:
                     exit_layer_counter_correct[outputs[-1]] += 1
             else:
-                preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
+                new_preds = logits.detach().cpu().numpy()
+                preds = np.append(preds, new_preds, axis=0)
                 out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
-                if np.argmax(preds[-1]) == out_label_ids[-1]:
+                if np.argmax(new_preds) == out_label_ids[-1]:
                     exit_layer_counter_correct[outputs[-1]] += 1
         eval_time = time.time() - st
         print("Eval time:", eval_time)

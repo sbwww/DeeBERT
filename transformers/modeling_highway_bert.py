@@ -8,8 +8,12 @@ from .modeling_bert import BertLayer, BertLayerNorm, BertPreTrainedModel
 def entropy(x):
     # x: torch.Tensor, logits BEFORE softmax
     exp_x = torch.exp(x)
-    A = torch.sum(exp_x, dim=1)    # sum of exp(x_i)
-    B = torch.sum(x*exp_x, dim=1)  # sum of x_i * exp(x_i)
+    if x.dim() == 3:  # NER CoNLL
+        A = torch.sum(exp_x, dim=2)    # sum of exp(x_i)
+        B = torch.sum(x*exp_x, dim=2)  # sum of x_i * exp(x_i)
+    else: # GLUE dataset
+        A = torch.sum(exp_x, dim=1)
+        B = torch.sum(x*exp_x, dim=1)
     return torch.log(A) - B/A
 
 
@@ -63,7 +67,7 @@ class BertEncoder(nn.Module):
         self.early_exit_entropy = [-1 for _ in range(config.num_hidden_layers)]
 
     def set_early_exit_entropy(self, x):
-        print(x)
+        print('entropy set as ', x)
         if (type(x) is float) or (type(x) is int):
             for i in range(len(self.early_exit_entropy)):
                 self.early_exit_entropy[i] = x
@@ -97,11 +101,12 @@ class BertEncoder(nn.Module):
                 current_outputs = current_outputs + (all_attentions,)
 
             highway_exit = self.highway[i](current_outputs)
-            # logits, pooled_output
+            # logits, sequence_output, pooled_output
 
             if not self.training:
                 highway_logits = highway_exit[0]
                 highway_entropy = entropy(highway_logits)
+                highway_entropy = torch.mean(highway_entropy) # FIXME: simply using mean?
                 highway_exit = highway_exit + (highway_entropy,)  # logits, hidden_states(?), entropy
                 all_highway_exits = all_highway_exits + (highway_exit,)
 
@@ -323,23 +328,32 @@ class BertHighway(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        if config.finetuning_task in {"conll"}:
+            self.need_pool = True
+        else:
+            self.need_pool = True
+
     def forward(self, encoder_outputs):
         # Pooler
-        pooler_input = encoder_outputs[0]
-        pooler_output = self.pooler(pooler_input)
+        sequence_output = encoder_outputs[0]
+        pooler_output = self.pooler(sequence_output)
         # "return" pooler_output
 
         # BertModel
-        bmodel_output = (pooler_input, pooler_output) + encoder_outputs[1:]
-        # "return" bodel_output
+        bmodel_output = (sequence_output, pooler_output) + encoder_outputs[1:]
+        # "return" bmodel_output
 
         # Dropout and classification
         pooled_output = bmodel_output[1]
 
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
+        if self.need_pool:
+            pooled_output = self.dropout(pooled_output)
+            logits = self.classifier(pooled_output)
+        else:
+            sequence_output = self.dropout(sequence_output)
+            logits = self.classifier(sequence_output)
 
-        return logits, pooled_output
+        return logits, sequence_output, pooled_output
 
 
 class BertForSequenceClassification(BertPreTrainedModel):
@@ -410,6 +424,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
         if not self.training:
             original_entropy = entropy(logits)
+            original_entropy = torch.mean(original_entropy) # FIXME: simply using mean?
             highway_entropy = []
             highway_logits_all = []
         if labels is not None:
@@ -520,6 +535,7 @@ class BertForTokenClassification(BertPreTrainedModel):
 
         if not self.training:
             original_entropy = entropy(logits)
+            original_entropy = torch.mean(original_entropy) # FIXME: simply using mean?
             highway_entropy = []
             highway_logits_all = []
         if labels is not None:
@@ -539,7 +555,7 @@ class BertForTokenClassification(BertPreTrainedModel):
                 highway_logits = highway_exit[0]
                 if not self.training:
                     highway_logits_all.append(highway_logits)
-                    highway_entropy.append(highway_exit[2])
+                    highway_entropy.append(highway_exit[3])
                 loss_fct = CrossEntropyLoss()
                 # Only keep active parts of the loss
                 if attention_mask is not None:
