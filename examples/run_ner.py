@@ -22,6 +22,7 @@ import glob
 import logging
 import os
 import random
+import sys
 
 import numpy as np
 import torch
@@ -33,6 +34,8 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
+# for torchrun, import transformers in a folder other than examples/
+sys.path.append('')
 from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, BertTokenizer
 from transformers import RobertaConfig, RobertaForTokenClassification, RobertaTokenizer
@@ -127,7 +130,7 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                       "attention_mask": batch[1],
                       "labels": batch[3]}
             if args.model_type != "distilbert":
-                inputs["token_type_ids"]: batch[2] if args.model_type in ["bert", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
+                inputs["token_type_ids"] = batch[2] if args.model_type in ["bert", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
 
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
@@ -217,7 +220,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
                       "attention_mask": batch[1],
                       "labels": batch[3]}
             if args.model_type != "distilbert":
-                inputs["token_type_ids"]: batch[2] if args.model_type in ["bert", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
+                inputs["token_type_ids"] = batch[2] if args.model_type in ["bert", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
             outputs = model(**inputs)
             tmp_eval_loss, logits = outputs[:2]
 
@@ -316,6 +319,8 @@ def main():
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
                         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS))
+    parser.add_argument("--task_name", default=None, type=str, required=True,
+                        help="The name of the task to train selected in the list: " + ", ".join('CoNLL'))
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
 
@@ -435,9 +440,11 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     args.model_type = args.model_type.lower()
+    args.task_name = args.task_name.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
                                           num_labels=num_labels,
+                                          finetuning_task=args.task_name,
                                           cache_dir=args.cache_dir if args.cache_dir else None)
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
                                                 do_lower_case=args.do_lower_case,

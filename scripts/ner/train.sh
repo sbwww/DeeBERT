@@ -3,9 +3,9 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 PATH_TO_DATA=$1
 
-MODEL_TYPE=$2  # bert or roberta
-MODEL_SIZE=$3  # base or large
-DATASET=$4  # SST-2, MRPC, RTE, QNLI, QQP, or MNLI
+MODEL_TYPE=$2
+MODEL_SIZE=$3
+DATASET=$4
 N_GPU=$5
 
 MODEL_NAME=${MODEL_TYPE}-${MODEL_SIZE}
@@ -17,8 +17,7 @@ then
 fi
 
 
-# python -um examples.run_highway_glue \
-python -m torch.distributed.launch --nproc_per_node=$N_GPU examples/run_highway_glue.py \
+python -m torch.distributed.launch --nproc_per_node=$N_GPU examples/run_ner.py \
   --model_type $MODEL_TYPE \
   --model_name_or_path $MODEL_NAME \
   --task_name $DATASET \
@@ -27,14 +26,12 @@ python -m torch.distributed.launch --nproc_per_node=$N_GPU examples/run_highway_
   --do_lower_case \
   --data_dir $PATH_TO_DATA/$DATASET \
   --max_seq_length 128 \
-  --per_gpu_eval_batch_size=1 \
-  --per_gpu_train_batch_size=8 \
+  --per_gpu_eval_batch_size 1 \
+  --per_gpu_train_batch_size 8 \
   --learning_rate 2e-5 \
   --num_train_epochs $EPOCHS \
-  --overwrite_output_dir \
-  --seed 42 \
-  --output_dir ./saved_models/${MODEL_TYPE}-${MODEL_SIZE}/$DATASET/two_stage \
-  --plot_data_dir ./plotting/ \
   --save_steps 0 \
+  --seed 42 \
+  --output_dir ./saved_models/${MODEL_TYPE}-${MODEL_SIZE}/$DATASET/raw \
   --overwrite_cache \
-  --eval_after_first_stage
+  --overwrite_output_dir

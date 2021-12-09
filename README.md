@@ -45,13 +45,13 @@ conda install --file ./examples/requirements.txt
 
 ## Usage
 
-Added script `DeeBERT.sh` to run the entire process
+Added script `DeeBERT_*.sh` to run the entire process
 
 `DeeBERT.ipynb` is also available, but VSCode stucks when the output of tqdm is long, so the notebook is mainly use as a reference of Colab
 
 ---
 
-There are four scripts in the `scripts` folder, which can be run from the repo root, e.g., `scripts/train.sh`.
+There are four scripts in the `scripts/*/` folder, which can be run from the repo root, e.g., `scripts/glue/train.sh`.
 
 In each script, there are several things to modify before running:
 
@@ -65,7 +65,7 @@ In each script, there are several things to modify before running:
 * model_type (bert or roberta)
 * model_size (base or large)
 * dataset (SST-2, MRPC, RTE, QNLI, QQP, or MNLI)
-* settings related to multi-gpu training, `CUDA_VISIBLE_DEVICES` in `scripts/*.sh` and `N_GPU` in `DeeBERT.sh`.
+* settings related to multi-gpu training, `CUDA_VISIBLE_DEVICES` in `scripts/*/*.sh` and `N_GPU` in `DeeBERT_*.sh`.
 
 #### train.sh
 

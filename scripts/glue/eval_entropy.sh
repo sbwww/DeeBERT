@@ -3,9 +3,9 @@ export CUDA_VISIBLE_DEVICES=0
 
 PATH_TO_DATA=$1
 
-MODEL_TYPE=$2  # bert or roberta
-MODEL_SIZE=$3  # base or large
-DATASET=$4  # SST-2, MRPC, RTE, QNLI, QQP, or MNLI
+MODEL_TYPE=$2
+MODEL_SIZE=$3
+DATASET=$4
 
 MODEL_NAME=${MODEL_TYPE}-${MODEL_SIZE}
 if [ $MODEL_TYPE = 'bert' ]
@@ -18,7 +18,7 @@ ENTROPIES="0 0.1 0.2 0.3 0.4 0.5 0.6 0.7"
 
 for ENTROPY in $ENTROPIES; do
   echo $ENTROPY
-  python -um examples.run_highway_glue \
+  python examples/run_highway_glue.py \
     --model_type $MODEL_TYPE \
     --model_name_or_path ./saved_models/${MODEL_TYPE}-${MODEL_SIZE}/$DATASET/two_stage \
     --task_name $DATASET \
