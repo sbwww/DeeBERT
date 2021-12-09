@@ -329,7 +329,7 @@ class BertHighway(nn.Module):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         if config.finetuning_task in {"conll"}:
-            self.need_pool = True
+            self.need_pool = False
         else:
             self.need_pool = True
 
