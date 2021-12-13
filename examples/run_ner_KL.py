@@ -22,40 +22,25 @@ import glob
 import logging
 import os
 import random
-import time
 import sys
 
 import numpy as np
 import torch
+from seqeval.metrics import precision_score, recall_score, f1_score
+from tensorboardX import SummaryWriter
+from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
-from torch.nn import CrossEntropyLoss
-
-from seqeval.metrics import precision_score, recall_score, f1_score
-from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
-
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except:
-    from tensorboardX import SummaryWriter
-
 from tqdm import tqdm, trange
+from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
 # for torchrun, import transformers in a folder other than examples/
 sys.path.append('')
-from transformers import (WEIGHTS_NAME, BertConfig,
-                                  BertTokenizer,
-                                  RobertaConfig,
-                                  RobertaTokenizer,
-                                  DistilBertConfig,
-                                  DistilBertTokenizer,
-                                  CamembertConfig,
-                                  CamembertTokenizer)
-
-from transformers.modeling_highway_bert import BertForTokenClassification
-# from transformers.modeling_highway_roberta import RobertaForTokenClassification
-
 from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, BertTokenizer
+from transformers import RobertaConfig, RobertaForTokenClassification, RobertaTokenizer
+from transformers import DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer
+from transformers import CamembertConfig, CamembertForTokenClassification, CamembertTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +50,9 @@ ALL_MODELS = sum(
 
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForTokenClassification, BertTokenizer),
-    # "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer),
-    # "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer),
-    # "camembert": (CamembertConfig, CamembertForTokenClassification, CamembertTokenizer),
+    "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer),
+    "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer),
+    "camembert": (CamembertConfig, CamembertForTokenClassification, CamembertTokenizer),
 }
 
 
@@ -79,7 +64,7 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id, train_highway=False):
+def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     """ Train the model """
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
@@ -96,24 +81,11 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id, tra
 
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ["bias", "LayerNorm.weight"]
-    if train_highway:
-        optimizer_grouped_parameters = [
-            {'params': [p for n, p in model.named_parameters() if
-                        ("highway" in n) and (not any(nd in n for nd in no_decay))],
-             'weight_decay': args.weight_decay},
-            {'params': [p for n, p in model.named_parameters() if
-                        ("highway" in n) and (any(nd in n for nd in no_decay))],
-             'weight_decay': 0.0}
-        ]
-    else:
-        optimizer_grouped_parameters = [
-            {'params': [p for n, p in model.named_parameters() if
-                        ("highway" not in n) and (not any(nd in n for nd in no_decay))],
-             'weight_decay': args.weight_decay},
-            {'params': [p for n, p in model.named_parameters() if
-                        ("highway" not in n) and (any(nd in n for nd in no_decay))],
-             'weight_decay': 0.0}
-        ]
+    optimizer_grouped_parameters = [
+        {"params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+         "weight_decay": args.weight_decay},
+        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0}
+    ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
     if args.fp16:
@@ -154,13 +126,12 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id, tra
         for step, batch in enumerate(epoch_iterator):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
-            inputs = {"input_ids":      batch[0],
+            inputs = {"input_ids": batch[0],
                       "attention_mask": batch[1],
-                      "labels":         batch[3]}
+                      "labels": batch[3]}
             if args.model_type != "distilbert":
                 inputs["token_type_ids"] = batch[2] if args.model_type in ["bert", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
 
-            inputs['train_highway'] = train_highway
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
@@ -220,13 +191,9 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id, tra
     return global_step, tr_loss / global_step
 
 
-def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix="", output_layer=-1, eval_highway=False):
-    eval_output_dir = args.output_dir
+def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
     eval_dataset = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode=mode)
 
-    if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
-        os.makedirs(eval_output_dir)
-    
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
@@ -244,43 +211,30 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
     nb_eval_steps = 0
     preds = None
     out_label_ids = None
-    exit_layer_counter = {(i+1):0 for i in range(model.num_layers)}
-    exit_layer_counter_correct = {(i+1):0 for i in range(model.num_layers)} # 正确结果数量统计
-    st = time.time()
+    model.eval()
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
-        model.eval()
         batch = tuple(t.to(args.device) for t in batch)
 
         with torch.no_grad():
-            inputs = {"input_ids":      batch[0],
+            inputs = {"input_ids": batch[0],
                       "attention_mask": batch[1],
-                      "labels":         batch[3]}
+                      "labels": batch[3]}
             if args.model_type != "distilbert":
                 inputs["token_type_ids"] = batch[2] if args.model_type in ["bert", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
-            if output_layer >= 0:
-                inputs['output_layer'] = output_layer
             outputs = model(**inputs)
-            if eval_highway:
-                exit_layer_counter[outputs[-1]] += 1
             tmp_eval_loss, logits = outputs[:2]
+
             if args.n_gpu > 1:
                 tmp_eval_loss = tmp_eval_loss.mean()  # mean() to average on multi-gpu parallel evaluating
+
             eval_loss += tmp_eval_loss.item()
         nb_eval_steps += 1
         if preds is None:
             preds = logits.detach().cpu().numpy()
             out_label_ids = inputs["labels"].detach().cpu().numpy()
-            # print(np.argmax(preds, axis=2), out_label_ids)
-            # if np.argmax(preds, axis=2) == out_label_ids[-1]:
-            #     exit_layer_counter_correct[outputs[-1]] += 1
         else:
-            new_preds = logits.detach().cpu().numpy()
-            preds = np.append(preds, new_preds, axis=0)
+            preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
             out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
-            # if np.argmax(new_preds, axis=2) == out_label_ids[-1]: # FIXME: NER 的正类统计
-            #     exit_layer_counter_correct[outputs[-1]] += 1
-    eval_time = time.time() - st
-    print("Eval time:", eval_time)
 
     eval_loss = eval_loss / nb_eval_steps
     preds = np.argmax(preds, axis=2)
@@ -303,38 +257,15 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
         "f1": f1_score(out_label_list, preds_list)
     }
 
-    if eval_highway:
-        print("Exit layer counter", exit_layer_counter)
-        print("Exit layer counter Correct",exit_layer_counter_correct) # 输出正类数量
-        actual_cost = sum([l*c for l, c in exit_layer_counter.items()])
-        full_cost = len(eval_dataloader) * model.num_layers
-        print("Expected saving", actual_cost/full_cost)
-        if args.early_exit_entropy>=0:
-            save_fname = args.plot_data_dir + '/' +\
-                            args.model_name_or_path[2:] +\
-                            "/entropy_{}.npy".format(args.early_exit_entropy)
-            if not os.path.exists(os.path.dirname(save_fname)):
-                os.makedirs(os.path.dirname(save_fname))
-            print_result = results
-            np.save(save_fname,
-                    np.array([exit_layer_counter,
-                              exit_layer_counter_correct,
-                              eval_time,
-                              actual_cost/full_cost,
-                              print_result]))
-
-    output_eval_file = os.path.join(eval_output_dir, prefix, "eval_results.txt")
-    with open(output_eval_file, "w") as writer:
-        logger.info("***** Eval results %s *****", prefix)
-        for key in sorted(results.keys()):
-            logger.info("  %s = %s", key, str(results[key]))
-            writer.write("%s = %s\n" % (key, str(results[key])))
+    logger.info("***** Eval results %s *****", prefix)
+    for key in sorted(results.keys()):
+        logger.info("  %s = %s", key, str(results[key]))
 
     return results, preds_list
 
 
 def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
-    if args.local_rank not in [-1, 0] and not evaluate: # FIXME: evaluate -> mode
+    if args.local_rank not in [-1, 0] and not evaluate:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
@@ -392,8 +323,6 @@ def main():
                         help="The name of the task to train selected in the list: " + ", ".join('CoNLL'))
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
-    parser.add_argument("--plot_data_dir", default="./plotting/", type=str, required=False,
-                        help="The directory to store data for plotting figures.")
 
     ## Other parameters
     parser.add_argument("--labels", default="", type=str,
@@ -417,13 +346,9 @@ def main():
                         help="Whether to run evaluation during training at each logging step.")
     parser.add_argument("--do_lower_case", action="store_true",
                         help="Set this flag if you are using an uncased model.")
-    parser.add_argument("--eval_each_highway", action='store_true',
-                        help="Set this flag to evaluate each highway.")
-    parser.add_argument("--eval_after_first_stage", action='store_true',
-                        help="Set this flag to evaluate after training only bert (not highway).")
-    parser.add_argument("--eval_highway", action='store_true',
-                        help="Set this flag if it's evaluating highway models")
 
+    parser.add_argument("--num_hidden_layers", default=1, type=int,
+                        help="Number of BERT Layers.")
     parser.add_argument("--per_gpu_train_batch_size", default=8, type=int,
                         help="Batch size per GPU/CPU for training.")
     parser.add_argument("--per_gpu_eval_batch_size", default=8, type=int,
@@ -444,8 +369,6 @@ def main():
                         help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
     parser.add_argument("--warmup_steps", default=0, type=int,
                         help="Linear warmup over warmup_steps.")
-    parser.add_argument("--early_exit_entropy", default=-1, type=float,
-                        help = "Entropy threshold for early exit.")
 
     parser.add_argument("--logging_steps", type=int, default=50,
                         help="Log every X updates steps.")
@@ -510,7 +433,6 @@ def main():
 
     # Prepare CONLL-2003 task
     labels = get_labels(args.labels)
-    # ['O', 'B-MISC', 'I-MISC', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG', 'B-LOC', 'I-LOC']
     num_labels = len(labels)
     # Use cross entropy ignore index as padding label id so that only real label ids contribute to the loss later
     pad_token_label_id = CrossEntropyLoss().ignore_index
@@ -524,6 +446,7 @@ def main():
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
                                           num_labels=num_labels,
+                                          num_hidden_layers=args.num_hidden_layers,
                                           finetuning_task=args.task_name,
                                           cache_dir=args.cache_dir if args.cache_dir else None)
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
@@ -533,12 +456,6 @@ def main():
                                         from_tf=bool(".ckpt" in args.model_name_or_path),
                                         config=config,
                                         cache_dir=args.cache_dir if args.cache_dir else None)
-    if args.model_type == "bert":
-        model.bert.encoder.set_early_exit_entropy(args.early_exit_entropy)
-        model.bert.init_highway_pooler()
-    else:
-        model.roberta.encoder.set_early_exit_entropy(args.early_exit_entropy)
-        model.roberta.init_highway_pooler()
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
@@ -552,12 +469,6 @@ def main():
         train_dataset = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode="train")
         global_step, tr_loss = train(args, train_dataset, model, tokenizer, labels, pad_token_label_id)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
-
-        if args.eval_after_first_stage:
-            result = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev", prefix="")
-            print_result = result
-
-        train(args, train_dataset, model, tokenizer, labels, pad_token_label_id, train_highway=True)
 
     # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
@@ -574,11 +485,6 @@ def main():
 
         # Good practice: save your training arguments together with the trained model
         torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
-        # Load a trained model and vocabulary that you have fine-tuned
-
-        model = model_class.from_pretrained(args.output_dir)
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir)
-        model.to(args.device)
 
     # Evaluation
     results = {}
@@ -591,34 +497,9 @@ def main():
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
-            prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
-
             model = model_class.from_pretrained(checkpoint)
-            if args.model_type=="bert":
-                model.bert.encoder.set_early_exit_entropy(args.early_exit_entropy)
-            else:
-                model.roberta.encoder.set_early_exit_entropy(args.early_exit_entropy)
             model.to(args.device)
-            result, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id,
-                                 mode="dev", prefix=prefix, eval_highway=args.eval_highway)
-            print_result = result['f1']
-            print("Result: {}".format(print_result))
-            if args.eval_each_highway:
-                last_layer_results = print_result
-                each_layer_results = []
-                for i in range(model.num_layers):
-                    logger.info("\n")
-                    # FIXME: value error, performance of 1-11 level obviously wrong, <value_error_exit_logits>
-                    _result, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev", prefix=prefix,
-                                       output_layer=i, eval_highway=args.eval_highway)
-                    if i+1 < model.num_layers:
-                        each_layer_results.append(_result['f1'])
-                each_layer_results.append(last_layer_results)
-                save_fname = args.plot_data_dir + '/' + args.model_name_or_path[2:] + "/each_layer.npy"
-                if not os.path.exists(os.path.dirname(save_fname)):
-                    os.makedirs(os.path.dirname(save_fname))
-                np.save(save_fname,
-                        np.array(each_layer_results))
+            result, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev", prefix=global_step)
             if global_step:
                 result = {"{}_{}".format(global_step, k): v for k, v in result.items()}
             results.update(result)

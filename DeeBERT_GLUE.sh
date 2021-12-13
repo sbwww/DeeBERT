@@ -12,7 +12,7 @@ MODEL_SIZE="base"  # base or large
 # WNLI  coreference/NLI
 
 DATASETS="CoLA SST-2 MRPC STS-B QQP MNLI QNLI RTE WNLI"
-N_GPU=2
+N_GPU=4
 
 for DATASET in $DATASETS; do
   echo $DATASET

@@ -101,7 +101,7 @@ class BertEncoder(nn.Module):
                 current_outputs = current_outputs + (all_attentions,)
 
             highway_exit = self.highway[i](current_outputs)
-            # logits, sequence_output, pooled_output
+            # logits, sequence_output (or pooled_output)
 
             if not self.training:
                 highway_logits = highway_exit[0]
@@ -315,7 +315,7 @@ class HighwayException(Exception):
         self.exit_layer = exit_layer  # start from 1!
 
 
-class BertHighway(nn.Module):
+class BertHighway(nn.Module): # FIXME: extend to other tasks other than BertForSequenceClassification
     r"""A module to provide a shortcut
     from
     the output of one non-final BertLayer in BertEncoder
@@ -336,24 +336,25 @@ class BertHighway(nn.Module):
     def forward(self, encoder_outputs):
         # Pooler
         sequence_output = encoder_outputs[0]
-        pooler_output = self.pooler(sequence_output)
-        # "return" pooler_output
-
-        # BertModel
-        bmodel_output = (sequence_output, pooler_output) + encoder_outputs[1:]
-        # "return" bmodel_output
-
-        # Dropout and classification
-        pooled_output = bmodel_output[1]
-
         if self.need_pool:
-            pooled_output = self.dropout(pooled_output)
+            pooler_output = self.pooler(sequence_output)
+            # "return" pooler_output
+
+            # BertModel
+            bmodel_output = (sequence_output, pooler_output) + encoder_outputs[1:]
+            # "return" bmodel_output
+
+            # Dropout and classification
+            pooled_output = bmodel_output[1]
+
+            output = self.dropout(pooled_output)
             logits = self.classifier(pooled_output)
         else:
-            sequence_output = self.dropout(sequence_output)
+            output = self.dropout(sequence_output)
             logits = self.classifier(sequence_output)
 
-        return logits, sequence_output, pooled_output
+        return logits, output
+        # return logits, sequence_output, pooled_output
 
 
 class BertForSequenceClassification(BertPreTrainedModel):
@@ -551,20 +552,20 @@ class BertForTokenClassification(BertPreTrainedModel):
             
             # work with highway exits
             highway_losses = []
-            for highway_exit in outputs[-1]:
+            for highway_exit in outputs[-1]: # FIXME: error in each layer logits, search <value_error_exit_logits> globaly
                 highway_logits = highway_exit[0]
                 if not self.training:
                     highway_logits_all.append(highway_logits)
-                    highway_entropy.append(highway_exit[3])
+                    highway_entropy.append(highway_exit[2])
                 loss_fct = CrossEntropyLoss()
                 # Only keep active parts of the loss
                 if attention_mask is not None:
                     active_loss = attention_mask.view(-1) == 1
-                    active_logits = logits.view(-1, self.num_labels)[active_loss]
+                    active_logits = highway_logits.view(-1, self.num_labels)[active_loss]
                     active_labels = labels.view(-1)[active_loss]
                     highway_loss = loss_fct(active_logits, active_labels)
                 else:
-                    highway_loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                    highway_loss = loss_fct(highway_logits.view(-1, self.num_labels), labels.view(-1))
                 highway_losses.append(highway_loss)
 
             if train_highway:
